@@ -37,6 +37,7 @@ export const ClientHubDrawer: React.FC<ClientHubDrawerProps> = ({
     removeSavedProject,
     submitInquiry,
     isAdmin,
+    isDemoClient,
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'bookings' | 'moodboard' | 'inquiry'>('bookings');
@@ -117,6 +118,11 @@ export const ClientHubDrawer: React.FC<ClientHubDrawerProps> = ({
                   {isAdmin && (
                     <span className="rounded bg-[#C8FF45]/20 border border-[#C8FF45]/50 px-1.5 py-0.2 text-[10px] font-mono text-[#C8FF45]">
                       ADMIN
+                    </span>
+                  )}
+                  {isDemoClient && (
+                    <span className="rounded bg-sky-500/20 border border-sky-500/40 px-1.5 py-0.5 text-[10px] font-mono text-sky-400">
+                      PREVIEW
                     </span>
                   )}
                 </div>

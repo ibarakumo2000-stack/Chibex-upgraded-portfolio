@@ -1,12 +1,47 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sparkles, Bookmark, Calendar, ArrowRight, ShieldCheck } from 'lucide-react';
+import {
+  X,
+  Sparkles,
+  Bookmark,
+  Calendar,
+  ShieldCheck,
+  AlertTriangle,
+  Copy,
+  Check,
+  ExternalLink,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const AuthModal: React.FC = () => {
-  const { isAuthModalOpen, closeAuthModal, signInWithGoogle, loading, authError } = useAuth();
+  const {
+    isAuthModalOpen,
+    closeAuthModal,
+    signInWithGoogle,
+    signInWithDemoClient,
+    loading,
+    authError,
+    clearAuthError,
+  } = useAuth();
+
+  const [copied, setCopied] = useState(false);
 
   if (!isAuthModalOpen) return null;
+
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isUnauthorizedDomain =
+    authError === 'auth/unauthorized-domain' ||
+    Boolean(authError?.toLowerCase().includes('unauthorized-domain'));
+
+  const handleCopyHostname = async () => {
+    try {
+      await navigator.clipboard.writeText(currentHostname);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -31,7 +66,7 @@ export const AuthModal: React.FC = () => {
           {/* Close button */}
           <button
             onClick={closeAuthModal}
-            className="absolute top-4 right-4 p-2 text-[#8A8E85] hover:text-[#F5F5F0] rounded-lg transition-colors"
+            className="absolute top-4 right-4 p-2 text-[#8A8E85] hover:text-[#F5F5F0] rounded-lg transition-colors cursor-pointer"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />
@@ -63,19 +98,84 @@ export const AuthModal: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 text-xs text-[#C5C8C1] rounded-lg bg-[#191B18] p-2.5 border border-[#2C302A]">
               <ShieldCheck className="h-4 w-4 text-[#e0b84c] shrink-0" />
-              <span>Fast 1-click Google authentication with cloud data persistence</span>
+              <span>Fast 1-click authentication with cloud data persistence</span>
             </div>
           </div>
 
-          {/* Error notice if any */}
-          {authError && (
-            <div className="mb-4 rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-xs text-red-300">
-              {authError}
-            </div>
-          )}
+          {/* Unauthorized Domain Diagnostic Card */}
+          {isUnauthorizedDomain ? (
+            <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs space-y-3 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-300">Firebase Domain Authorization Required</p>
+                  <p className="text-[#C5C8C1] leading-relaxed">
+                    Google Sign-In restricts popups to authorized domains. In Firebase Console, add this preview domain under <strong className="text-white">Authentication &gt; Settings &gt; Authorized domains</strong>:
+                  </p>
+                </div>
+              </div>
 
-          {/* Action button */}
-          <div className="space-y-3">
+              {/* Copyable Domain Box */}
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-[#101110] border border-[#2C302A] px-3 py-2">
+                <code className="font-mono text-[11px] text-[#C8FF45] truncate select-all">
+                  {currentHostname}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopyHostname}
+                  className="shrink-0 inline-flex items-center gap-1 text-[11px] font-mono text-[#8A8E85] hover:text-[#F5F5F0] transition-colors cursor-pointer"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-[#C8FF45]" />
+                      <span className="text-[#C8FF45]">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Action Buttons for resolving or bypassing */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <a
+                  href="https://console.firebase.google.com/project/gen-lang-client-0505194944/authentication/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#2C302A] bg-[#191B18] px-3 py-2 text-[11px] font-semibold text-[#F5F5F0] hover:border-[#C8FF45] transition-colors text-center cursor-pointer"
+                >
+                  <span>Firebase Console</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => signInWithDemoClient()}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#C8FF45] px-3 py-2 text-[11px] font-bold text-[#101110] hover:bg-[#bbf033] transition-colors cursor-pointer"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Enter as Demo Client</span>
+                </button>
+              </div>
+            </div>
+          ) : authError ? (
+            <div className="mb-4 rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-xs text-red-300 flex items-center justify-between">
+              <span>{authError}</span>
+              <button
+                type="button"
+                onClick={clearAuthError}
+                className="text-[#8A8E85] hover:text-white p-1"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : null}
+
+          {/* Action buttons */}
+          <div className="space-y-2.5">
             <button
               onClick={() => signInWithGoogle()}
               disabled={loading}
@@ -103,9 +203,19 @@ export const AuthModal: React.FC = () => {
               <span>Continue with Google</span>
             </button>
 
+            {/* Instant Demo Client Access Button */}
+            <button
+              type="button"
+              onClick={() => signInWithDemoClient()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-[#2C302A] bg-[#191B18] hover:border-[#C8FF45] hover:bg-[#1f221d] text-[#F5F5F0] hover:text-[#C8FF45] font-medium px-4 py-2.5 text-xs transition-all cursor-pointer"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-[#C8FF45]" />
+              <span>Instant Demo Client Access (Preview Mode)</span>
+            </button>
+
             <button
               onClick={closeAuthModal}
-              className="w-full text-center text-xs text-[#8A8E85] hover:text-[#C5C8C1] py-2 transition-colors"
+              className="w-full text-center text-xs text-[#8A8E85] hover:text-[#C5C8C1] py-1.5 transition-colors cursor-pointer"
             >
               Continue browsing portfolio as guest
             </button>

@@ -48,12 +48,23 @@ export interface SavedProjectRecord {
   savedAt: string;
 }
 
+export interface PortalUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  isDemo?: boolean;
+}
+
 interface AuthContextType {
-  currentUser: User | null;
+  currentUser: User | PortalUser | null;
   loading: boolean;
   isAdmin: boolean;
+  isDemoClient: boolean;
   authError: string | null;
+  clearAuthError: () => void;
   signInWithGoogle: () => Promise<void>;
+  signInWithDemoClient: (clientName?: string, clientEmail?: string) => void;
   logout: () => Promise<void>;
   // Saved Projects (Moodboard)
   savedProjects: SavedProjectRecord[];
@@ -92,19 +103,44 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [demoUser, setDemoUser] = useState<PortalUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('etech_demo_client_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [savedProjects, setSavedProjects] = useState<SavedProjectRecord[]>([]);
-  const [userBookings, setUserBookings] = useState<BookingRecord[]>([]);
+  const [savedProjects, setSavedProjects] = useState<SavedProjectRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('etech_demo_saved_projects');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [userBookings, setUserBookings] = useState<BookingRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('etech_demo_user_bookings');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isHubOpen, setIsHubOpen] = useState<boolean>(false);
+
+  // Effective user is either real Firebase user or preview demo user
+  const currentUser = firebaseUser || demoUser;
+  const isDemoClient = Boolean(!firebaseUser && demoUser);
 
   // Check admin privileges (runtime user email)
   const isAdmin = useMemo(() => {
     return currentUser?.email === 'ibarakumo2000@gmail.com';
   }, [currentUser]);
-
   // Initial connection test
   useEffect(() => {
     testConnection().catch((err) => {
@@ -115,10 +151,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Listen to Auth State
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
+      setFirebaseUser(user);
       setLoading(false);
 
       if (user) {
+        // Clear any demo user if real firebase user signs in
+        setDemoUser(null);
+        try {
+          localStorage.removeItem('etech_demo_client_user');
+        } catch {}
+
         // Sync or initialize UserProfile document
         try {
           const userDocRef = doc(db, 'users', user.uid);
@@ -136,21 +178,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('Error syncing user profile to Firestore:', error);
         }
       } else {
-        setSavedProjects([]);
-        setUserBookings([]);
+        // If not firebase user and not demo user, clear state
+        const savedDemo = localStorage.getItem('etech_demo_client_user');
+        if (!savedDemo) {
+          setSavedProjects([]);
+          setUserBookings([]);
+        }
       }
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Sync Saved Projects (Moodboard) in real-time
+  // Sync Saved Projects (Moodboard) in real-time from Firestore when Firebase user is active
   useEffect(() => {
-    if (!currentUser) return;
+    if (!firebaseUser) return;
 
     const path = 'savedProjects';
     try {
-      const q = query(collection(db, path), where('userId', '==', currentUser.uid));
+      const q = query(collection(db, path), where('userId', '==', firebaseUser.uid));
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
@@ -169,15 +215,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.warn('Failed to attach savedProjects listener:', error);
     }
-  }, [currentUser]);
+  }, [firebaseUser]);
 
-  // Sync Bookings in real-time
+  // Sync Bookings in real-time from Firestore when Firebase user is active
   useEffect(() => {
-    if (!currentUser) return;
+    if (!firebaseUser) return;
 
     const path = 'bookings';
     try {
-      const q = query(collection(db, path), where('userId', '==', currentUser.uid));
+      const q = query(collection(db, path), where('userId', '==', firebaseUser.uid));
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
@@ -185,7 +231,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           snapshot.forEach((docSnap) => {
             items.push(docSnap.data() as BookingRecord);
           });
-          // Sort by creation date descending
           items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           setUserBookings(items);
         },
@@ -198,29 +243,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.warn('Failed to attach bookings listener:', error);
     }
-  }, [currentUser]);
+  }, [firebaseUser]);
 
-  // Google Sign-In
+  // Google Sign-In with robust domain error detection
   const signInWithGoogle = async () => {
     setAuthError(null);
     try {
       await signInWithPopup(auth, googleProvider);
       setIsAuthModalOpen(false);
     } catch (error: any) {
-      console.error('Google sign-in error:', error);
-      setAuthError(error?.message || 'Failed to sign in with Google');
-      throw error;
+      console.warn('Google sign-in attempt notice:', error);
+      const code = error?.code || '';
+      const msg = error?.message || '';
+
+      if (code === 'auth/unauthorized-domain' || msg.includes('auth/unauthorized-domain')) {
+        setAuthError('auth/unauthorized-domain');
+      } else if (code === 'auth/popup-closed-by-user') {
+        // User voluntarily dismissed popup
+        setAuthError(null);
+      } else {
+        setAuthError(msg || 'Failed to complete Google Sign-In.');
+      }
     }
+  };
+
+  // Instant Preview / Demo Client Sign-In (Allows testing portal without external OAuth constraints)
+  const signInWithDemoClient = (clientName?: string, clientEmail?: string) => {
+    const demo: PortalUser = {
+      uid: 'demo_client_' + (clientEmail ? clientEmail.replace(/[^a-zA-Z0-9]/g, '') : 'ibarakumo'),
+      displayName: clientName || 'Ibarakumo (Client)',
+      email: clientEmail || 'ibarakumo2000@gmail.com',
+      photoURL: null,
+      isDemo: true,
+    };
+
+    setDemoUser(demo);
+    try {
+      localStorage.setItem('etech_demo_client_user', JSON.stringify(demo));
+    } catch {}
+
+    setAuthError(null);
+    setIsAuthModalOpen(false);
+    setIsHubOpen(true);
   };
 
   // Sign-Out
   const logout = async () => {
     try {
-      await signOut(auth);
-      setSavedProjects([]);
-      setUserBookings([]);
+      if (firebaseUser) {
+        await signOut(auth);
+      }
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setFirebaseUser(null);
+      setDemoUser(null);
+      try {
+        localStorage.removeItem('etech_demo_client_user');
+      } catch {}
+      setSavedProjects([]);
+      setUserBookings([]);
+      setIsHubOpen(false);
     }
   };
 
@@ -229,16 +312,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return savedProjects.some((item) => item.projectId === projectId);
   };
 
-  // Toggle Save Project
+  // Toggle Save Project (Supports both Firebase Cloud & Demo Client Local Storage)
   const toggleSaveProject = async (project: Project, notes?: string): Promise<boolean> => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
       return false;
     }
 
-    const path = 'savedProjects';
     const existing = savedProjects.find((item) => item.projectId === project.id);
 
+    // 1. If in Demo Client Mode, persist locally
+    if (isDemoClient) {
+      let nextProjects: SavedProjectRecord[];
+      let isSaved: boolean;
+
+      if (existing) {
+        nextProjects = savedProjects.filter((item) => item.projectId !== project.id);
+        isSaved = false;
+      } else {
+        const saveId = `save_${currentUser.uid}_${project.id}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const newRecord: SavedProjectRecord = {
+          id: saveId,
+          userId: currentUser.uid,
+          projectId: project.id,
+          projectTitle: project.title,
+          category: project.category,
+          imageUrl: typeof project.imagePath === 'string' ? project.imagePath : '',
+          notes: notes || '',
+          savedAt: new Date().toISOString(),
+        };
+        nextProjects = [newRecord, ...savedProjects];
+        isSaved = true;
+      }
+
+      setSavedProjects(nextProjects);
+      try {
+        localStorage.setItem('etech_demo_saved_projects', JSON.stringify(nextProjects));
+      } catch {}
+      return isSaved;
+    }
+
+    // 2. Real Firebase Firestore persistence
+    const path = 'savedProjects';
     try {
       if (existing) {
         await deleteDoc(doc(db, path, existing.id));
@@ -270,6 +385,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existing = savedProjects.find((item) => item.projectId === projectId);
     if (!existing) return;
 
+    if (isDemoClient) {
+      const nextProjects = savedProjects.filter((item) => item.projectId !== projectId);
+      setSavedProjects(nextProjects);
+      try {
+        localStorage.setItem('etech_demo_saved_projects', JSON.stringify(nextProjects));
+      } catch {}
+      return;
+    }
+
     const path = 'savedProjects';
     try {
       await deleteDoc(doc(db, path, existing.id));
@@ -278,7 +402,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Create Consultation Booking
+  // Create Consultation Booking (Supports both Firebase Cloud & Demo Client Local Storage)
   const createBooking = async (data: {
     userName: string;
     userEmail: string;
@@ -292,9 +416,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('User must be signed in to book a consultation');
     }
 
-    const path = 'bookings';
     const bookingId = `book_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
     const newBooking: BookingRecord = {
       id: bookingId,
       userId: currentUser.uid,
@@ -308,6 +430,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
 
+    if (isDemoClient) {
+      const nextBookings = [newBooking, ...userBookings];
+      setUserBookings(nextBookings);
+      try {
+        localStorage.setItem('etech_demo_user_bookings', JSON.stringify(nextBookings));
+      } catch {}
+      return bookingId;
+    }
+
+    const path = 'bookings';
     try {
       await setDoc(doc(db, path, bookingId), newBooking);
       return bookingId;
@@ -319,6 +451,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Cancel Booking
   const cancelBooking = async (bookingId: string) => {
     if (!currentUser) return;
+
+    if (isDemoClient) {
+      const nextBookings = userBookings.map((b) =>
+        b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
+      );
+      setUserBookings(nextBookings);
+      try {
+        localStorage.setItem('etech_demo_user_bookings', JSON.stringify(nextBookings));
+      } catch {}
+      return;
+    }
+
     const path = 'bookings';
     try {
       await updateDoc(doc(db, path, bookingId), {
@@ -338,31 +482,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     timeline?: string;
     message: string;
   }): Promise<string> => {
-    const path = 'inquiries';
     const inquiryId = `inq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    const newInquiry: Record<string, any> = {
-      id: inquiryId,
-      name: data.name.trim().slice(0, 100),
-      email: data.email.trim().slice(0, 100),
-      service: data.service.slice(0, 100),
-      message: data.message.trim().slice(0, 2000),
-      status: 'new',
-      createdAt: new Date().toISOString(),
-    };
+    // Always deliver to backend contact endpoint
+    fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fullName: data.name,
+        email: data.email,
+        serviceNeeded: data.service,
+        budgetRange: data.budget || 'Flexible',
+        preferredDeadline: data.timeline || 'Flexible',
+        projectDetails: data.message,
+      }),
+    }).catch((err) => console.warn('Inquiry background dispatch:', err));
 
-    if (currentUser) {
-      newInquiry.userId = currentUser.uid;
-    }
-    if (data.budget) newInquiry.budget = data.budget.slice(0, 50);
-    if (data.timeline) newInquiry.timeline = data.timeline.slice(0, 50);
+    if (firebaseUser) {
+      const path = 'inquiries';
+      const newInquiry: Record<string, any> = {
+        id: inquiryId,
+        name: data.name.trim().slice(0, 100),
+        email: data.email.trim().slice(0, 100),
+        service: data.service.slice(0, 100),
+        message: data.message.trim().slice(0, 2000),
+        status: 'new',
+        userId: firebaseUser.uid,
+        createdAt: new Date().toISOString(),
+      };
+      if (data.budget) newInquiry.budget = data.budget.slice(0, 50);
+      if (data.timeline) newInquiry.timeline = data.timeline.slice(0, 50);
 
-    try {
-      await setDoc(doc(db, path, inquiryId), newInquiry);
-      return inquiryId;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, path);
+      try {
+        await setDoc(doc(db, path, inquiryId), newInquiry);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
     }
+
+    return inquiryId;
   };
 
   return (
@@ -371,8 +529,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         loading,
         isAdmin,
+        isDemoClient,
         authError,
+        clearAuthError: () => setAuthError(null),
         signInWithGoogle,
+        signInWithDemoClient,
         logout,
         savedProjects,
         isProjectSaved,
@@ -384,7 +545,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         submitInquiry,
         isAuthModalOpen,
         openAuthModal: () => setIsAuthModalOpen(true),
-        closeAuthModal: () => setIsAuthModalOpen(false),
+        closeAuthModal: () => {
+          setIsAuthModalOpen(false);
+          setAuthError(null);
+        },
         isHubOpen,
         openHub: () => setIsHubOpen(true),
         closeHub: () => setIsHubOpen(false),
