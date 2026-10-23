@@ -17,10 +17,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        (request.auth.token.email == 'ibarakumo2000@gmail.com' && request.auth.token.email_verified == true) ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
+      return isSignedIn() && request.auth.token.email == 'ibarakumo2000@gmail.com' && request.auth.token.email_verified == true;
     }
 
     function isValidId(id) {
@@ -101,7 +98,7 @@ service cloud.firestore {
     // Collection: Bookings
     match /bookings/{bookingId} {
       allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
-      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidId(bookingId) && isValidBooking(incoming()) && incoming().userId == request.auth.uid;
       allow update: if (isSignedIn() && isValidBooking(incoming()) && incoming().userId == existing().userId && (
         (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']) && incoming().status in ['cancelled']) ||
@@ -113,7 +110,7 @@ service cloud.firestore {
     // Collection: Saved Projects (Moodboard)
     match /savedProjects/{saveId} {
       allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
-      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidId(saveId) && isValidSavedProject(incoming()) && incoming().userId == request.auth.uid;
       allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidSavedProject(incoming()) &&
                     incoming().userId == existing().userId &&

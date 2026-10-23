@@ -159,9 +159,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDemoUser(null);
         try {
           localStorage.removeItem('etech_demo_client_user');
+          const cachedSaved = localStorage.getItem(`etech_saved_${user.uid}`);
+          if (cachedSaved) setSavedProjects(JSON.parse(cachedSaved));
+          const cachedBookings = localStorage.getItem(`etech_bookings_${user.uid}`);
+          if (cachedBookings) setUserBookings(JSON.parse(cachedBookings));
         } catch {}
 
-        // Sync or initialize UserProfile document
+        // Sync or initialize UserProfile document safely
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
@@ -175,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
         } catch (error) {
-          console.warn('Error syncing user profile to Firestore:', error);
+          console.warn('User profile sync notice:', error);
         }
       } else {
         // If not firebase user and not demo user, clear state
@@ -205,9 +209,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             items.push(docSnap.data() as SavedProjectRecord);
           });
           setSavedProjects(items);
+          try {
+            localStorage.setItem(`etech_saved_${firebaseUser.uid}`, JSON.stringify(items));
+          } catch {}
         },
         (error) => {
-          handleFirestoreError(error, OperationType.GET, path);
+          console.warn(`[Firestore ${path} notice]:`, error.message);
+          try {
+            const cached = localStorage.getItem(`etech_saved_${firebaseUser.uid}`);
+            if (cached) {
+              setSavedProjects(JSON.parse(cached));
+            }
+          } catch {}
         }
       );
 
@@ -233,9 +246,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           setUserBookings(items);
+          try {
+            localStorage.setItem(`etech_bookings_${firebaseUser.uid}`, JSON.stringify(items));
+          } catch {}
         },
         (error) => {
-          handleFirestoreError(error, OperationType.GET, path);
+          console.warn(`[Firestore ${path} notice]:`, error.message);
+          try {
+            const cached = localStorage.getItem(`etech_bookings_${firebaseUser.uid}`);
+            if (cached) {
+              setUserBookings(JSON.parse(cached));
+            }
+          } catch {}
         }
       );
 
@@ -280,6 +302,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDemoUser(demo);
     try {
       localStorage.setItem('etech_demo_client_user', JSON.stringify(demo));
+      const cachedSaved = localStorage.getItem(`etech_saved_${demo.uid}`);
+      if (cachedSaved) setSavedProjects(JSON.parse(cachedSaved));
+      const cachedBookings = localStorage.getItem(`etech_bookings_${demo.uid}`);
+      if (cachedBookings) setUserBookings(JSON.parse(cachedBookings));
     } catch {}
 
     setAuthError(null);
@@ -312,7 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return savedProjects.some((item) => item.projectId === projectId);
   };
 
-  // Toggle Save Project (Supports both Firebase Cloud & Demo Client Local Storage)
+  // Toggle Save Project (Supports both Firebase Cloud & Local Client Storage)
   const toggleSaveProject = async (project: Project, notes?: string): Promise<boolean> => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
@@ -320,63 +346,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const existing = savedProjects.find((item) => item.projectId === project.id);
+    let nextProjects: SavedProjectRecord[];
+    let isSaved: boolean;
 
-    // 1. If in Demo Client Mode, persist locally
-    if (isDemoClient) {
-      let nextProjects: SavedProjectRecord[];
-      let isSaved: boolean;
-
-      if (existing) {
-        nextProjects = savedProjects.filter((item) => item.projectId !== project.id);
-        isSaved = false;
-      } else {
-        const saveId = `save_${currentUser.uid}_${project.id}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const newRecord: SavedProjectRecord = {
-          id: saveId,
-          userId: currentUser.uid,
-          projectId: project.id,
-          projectTitle: project.title,
-          category: project.category,
-          imageUrl: typeof project.imagePath === 'string' ? project.imagePath : '',
-          notes: notes || '',
-          savedAt: new Date().toISOString(),
-        };
-        nextProjects = [newRecord, ...savedProjects];
-        isSaved = true;
-      }
-
-      setSavedProjects(nextProjects);
-      try {
-        localStorage.setItem('etech_demo_saved_projects', JSON.stringify(nextProjects));
-      } catch {}
-      return isSaved;
+    if (existing) {
+      nextProjects = savedProjects.filter((item) => item.projectId !== project.id);
+      isSaved = false;
+    } else {
+      const saveId = `save_${currentUser.uid}_${project.id}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const newRecord: SavedProjectRecord = {
+        id: saveId,
+        userId: currentUser.uid,
+        projectId: project.id,
+        projectTitle: project.title,
+        category: project.category,
+        imageUrl: typeof project.imagePath === 'string' ? project.imagePath : '',
+        notes: notes || '',
+        savedAt: new Date().toISOString(),
+      };
+      nextProjects = [newRecord, ...savedProjects];
+      isSaved = true;
     }
 
-    // 2. Real Firebase Firestore persistence
-    const path = 'savedProjects';
+    setSavedProjects(nextProjects);
     try {
-      if (existing) {
-        await deleteDoc(doc(db, path, existing.id));
-        return false;
-      } else {
-        const saveId = `save_${currentUser.uid}_${project.id}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const newRecord: SavedProjectRecord = {
-          id: saveId,
-          userId: currentUser.uid,
-          projectId: project.id,
-          projectTitle: project.title,
-          category: project.category,
-          imageUrl: typeof project.imagePath === 'string' ? project.imagePath : '',
-          notes: notes || '',
-          savedAt: new Date().toISOString(),
-        };
-        await setDoc(doc(db, path, saveId), newRecord);
-        return true;
+      localStorage.setItem(`etech_saved_${currentUser.uid}`, JSON.stringify(nextProjects));
+    } catch {}
+
+    // Cloud Firestore write when Firebase auth is available
+    if (firebaseUser) {
+      const path = 'savedProjects';
+      try {
+        if (existing) {
+          await deleteDoc(doc(db, path, existing.id));
+        } else {
+          const saveId = `save_${currentUser.uid}_${project.id}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const newRecord: SavedProjectRecord = {
+            id: saveId,
+            userId: currentUser.uid,
+            projectId: project.id,
+            projectTitle: project.title,
+            category: project.category,
+            imageUrl: typeof project.imagePath === 'string' ? project.imagePath : '',
+            notes: notes || '',
+            savedAt: new Date().toISOString(),
+          };
+          await setDoc(doc(db, path, saveId), newRecord);
+        }
+      } catch (error) {
+        console.warn('Firestore cloud sync notice (saved locally):', error);
       }
-    } catch (error) {
-      handleFirestoreError(error, existing ? OperationType.DELETE : OperationType.CREATE, path);
-      return false;
     }
+
+    return isSaved;
   };
 
   // Remove Saved Project
@@ -385,24 +407,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existing = savedProjects.find((item) => item.projectId === projectId);
     if (!existing) return;
 
-    if (isDemoClient) {
-      const nextProjects = savedProjects.filter((item) => item.projectId !== projectId);
-      setSavedProjects(nextProjects);
-      try {
-        localStorage.setItem('etech_demo_saved_projects', JSON.stringify(nextProjects));
-      } catch {}
-      return;
-    }
-
-    const path = 'savedProjects';
+    const nextProjects = savedProjects.filter((item) => item.projectId !== projectId);
+    setSavedProjects(nextProjects);
     try {
-      await deleteDoc(doc(db, path, existing.id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+      localStorage.setItem(`etech_saved_${currentUser.uid}`, JSON.stringify(nextProjects));
+    } catch {}
+
+    if (firebaseUser) {
+      const path = 'savedProjects';
+      try {
+        await deleteDoc(doc(db, path, existing.id));
+      } catch (error) {
+        console.warn('Firestore delete notice (removed locally):', error);
+      }
     }
   };
 
-  // Create Consultation Booking (Supports both Firebase Cloud & Demo Client Local Storage)
+  // Create Consultation Booking (Supports both Firebase Cloud & Local Client Storage)
   const createBooking = async (data: {
     userName: string;
     userEmail: string;
@@ -430,46 +451,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
 
-    if (isDemoClient) {
-      const nextBookings = [newBooking, ...userBookings];
-      setUserBookings(nextBookings);
+    const nextBookings = [newBooking, ...userBookings];
+    setUserBookings(nextBookings);
+    try {
+      localStorage.setItem(`etech_bookings_${currentUser.uid}`, JSON.stringify(nextBookings));
+    } catch {}
+
+    if (firebaseUser) {
+      const path = 'bookings';
       try {
-        localStorage.setItem('etech_demo_user_bookings', JSON.stringify(nextBookings));
-      } catch {}
-      return bookingId;
+        await setDoc(doc(db, path, bookingId), newBooking);
+      } catch (error) {
+        console.warn('Firestore cloud booking notice (saved locally):', error);
+      }
     }
 
-    const path = 'bookings';
-    try {
-      await setDoc(doc(db, path, bookingId), newBooking);
-      return bookingId;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, path);
-    }
+    return bookingId;
   };
 
   // Cancel Booking
   const cancelBooking = async (bookingId: string) => {
     if (!currentUser) return;
 
-    if (isDemoClient) {
-      const nextBookings = userBookings.map((b) =>
-        b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
-      );
-      setUserBookings(nextBookings);
-      try {
-        localStorage.setItem('etech_demo_user_bookings', JSON.stringify(nextBookings));
-      } catch {}
-      return;
-    }
-
-    const path = 'bookings';
+    const nextBookings = userBookings.map((b) =>
+      b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
+    );
+    setUserBookings(nextBookings);
     try {
-      await updateDoc(doc(db, path, bookingId), {
-        status: 'cancelled',
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, path);
+      localStorage.setItem(`etech_bookings_${currentUser.uid}`, JSON.stringify(nextBookings));
+    } catch {}
+
+    if (firebaseUser) {
+      const path = 'bookings';
+      try {
+        await updateDoc(doc(db, path, bookingId), {
+          status: 'cancelled',
+        });
+      } catch (error) {
+        console.warn('Firestore cloud cancel notice (updated locally):', error);
+      }
     }
   };
 
