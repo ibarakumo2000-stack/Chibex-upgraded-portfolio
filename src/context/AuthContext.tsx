@@ -66,6 +66,7 @@ interface AuthContextType {
   clearAuthError: () => void;
   signInWithGoogle: () => Promise<void>;
   signInWithDemoClient: (clientName?: string, clientEmail?: string) => void;
+  signInWithAdminDirect: (email: string) => boolean;
   logout: () => Promise<void>;
   // Saved Projects (Moodboard)
   savedProjects: SavedProjectRecord[];
@@ -317,6 +318,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     trackActivity('client_sign_in', `Client authenticated as ${demo.email}`);
   };
 
+  // Direct Admin Sign-In (Restricted strictly to emperorstech885@gmail.com and ibarakumo2000@gmail.com)
+  const signInWithAdminDirect = (email: string): boolean => {
+    const cleanEmail = email.trim().toLowerCase();
+    const allowed = ['ibarakumo2000@gmail.com', 'emperorstech885@gmail.com'];
+    if (!allowed.includes(cleanEmail)) {
+      return false;
+    }
+
+    const adminUser: PortalUser = {
+      uid: 'admin_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, ''),
+      displayName: cleanEmail.startsWith('emperor') ? 'Emperor (Admin)' : 'Ibarakumo (Admin)',
+      email: cleanEmail,
+      photoURL: null,
+      isDemo: true,
+    };
+
+    setDemoUser(adminUser);
+    try {
+      localStorage.setItem('etech_demo_client_user', JSON.stringify(adminUser));
+    } catch {}
+    trackActivity('admin_login', `Studio Admin authenticated: ${cleanEmail}`);
+    return true;
+  };
+
   // Sign-Out
   const logout = async () => {
     try {
@@ -512,7 +537,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Submit Inquiry
+  // Submit Inquiry (Saves to Firestore and local storage, dispatches to server)
   const submitInquiry = async (data: {
     name: string;
     email: string;
@@ -529,7 +554,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Brief sent by ${data.name} (${data.email}) for ${data.service} (Budget: ${data.budget || 'Flexible'})`
     );
 
-    // Always deliver to backend contact endpoint
+    const newInquiry: Record<string, any> = {
+      id: inquiryId,
+      name: data.name.trim().slice(0, 100),
+      email: data.email.trim().slice(0, 100),
+      service: data.service.slice(0, 100),
+      message: data.message.trim().slice(0, 2000),
+      status: 'new',
+      createdAt: new Date().toISOString(),
+    };
+    if (currentUser?.uid) {
+      newInquiry.userId = currentUser.uid;
+    }
+    if (data.budget) newInquiry.budget = data.budget.slice(0, 50);
+    if (data.timeline) newInquiry.timeline = data.timeline.slice(0, 50);
+
+    // 1. Save to local inquiries cache for instant admin visibility
+    try {
+      const existingRaw = localStorage.getItem('etech_local_inquiries');
+      const existing: any[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const updated = [newInquiry, ...existing].slice(0, 100);
+      localStorage.setItem('etech_local_inquiries', JSON.stringify(updated));
+    } catch {}
+
+    // 2. Save to Firestore inquiries collection
+    try {
+      await setDoc(doc(db, 'inquiries', inquiryId), newInquiry);
+    } catch (err) {
+      console.warn('Firestore direct inquiry notice (persisted in local cache):', err);
+    }
+
+    // 3. Deliver to backend contact endpoint in background with safe error handling
     fetch('/api/contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -541,29 +596,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         preferredDeadline: data.timeline || 'Flexible',
         projectDetails: data.message,
       }),
-    }).catch((err) => console.warn('Inquiry background dispatch:', err));
-
-    if (firebaseUser) {
-      const path = 'inquiries';
-      const newInquiry: Record<string, any> = {
-        id: inquiryId,
-        name: data.name.trim().slice(0, 100),
-        email: data.email.trim().slice(0, 100),
-        service: data.service.slice(0, 100),
-        message: data.message.trim().slice(0, 2000),
-        status: 'new',
-        userId: firebaseUser.uid,
-        createdAt: new Date().toISOString(),
-      };
-      if (data.budget) newInquiry.budget = data.budget.slice(0, 50);
-      if (data.timeline) newInquiry.timeline = data.timeline.slice(0, 50);
-
-      try {
-        await setDoc(doc(db, path, inquiryId), newInquiry);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, path);
-      }
-    }
+    }).catch((err) => console.warn('Inquiry background email notice:', err));
 
     return inquiryId;
   };
@@ -579,6 +612,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearAuthError: () => setAuthError(null),
         signInWithGoogle,
         signInWithDemoClient,
+        signInWithAdminDirect,
         logout,
         savedProjects,
         isProjectSaved,

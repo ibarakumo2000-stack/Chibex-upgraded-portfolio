@@ -33,7 +33,7 @@ import { BookingRecord, SavedProjectRecord } from '../context/AuthContext';
 const ADMIN_EMAILS = ['ibarakumo2000@gmail.com', 'emperorstech885@gmail.com'];
 
 export const AdminPage: React.FC = () => {
-  const { currentUser, isAdmin, logout, openAuthModal } = useAuth();
+  const { currentUser, isAdmin, logout, signInWithGoogle, signInWithAdminDirect } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'activity' | 'sessions' | 'inquiries' | 'bookings'>('activity');
@@ -44,6 +44,11 @@ export const AdminPage: React.FC = () => {
   const [filterAction, setFilterAction] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [lastRefreshed, setLastRefreshed] = useState<string>(new Date().toLocaleTimeString());
+
+  // Admin login states
+  const [adminInputEmail, setAdminInputEmail] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
 
   // Fetch Firestore activity logs with fallback to local activity cache
   const loadAdminData = async () => {
@@ -65,7 +70,6 @@ export const AdminPage: React.FC = () => {
         items.push(docSnap.data() as ActivityEvent);
       });
       if (items.length > 0) {
-        // Merge cloud and local logs by unique ID
         const map = new Map<string, ActivityEvent>();
         [...items, ...localLogs].forEach((log) => map.set(log.id, log));
         const merged = Array.from(map.values()).sort(
@@ -77,24 +81,36 @@ export const AdminPage: React.FC = () => {
       console.warn('Admin Firestore cloud logs sync notice, displaying local audit stream:', err);
     }
 
-    // 3. Fetch Inquiries
+    // 3. Fetch Inquiries (merge cloud and local store)
     try {
       const inqSnap = await getDocs(query(collection(db, 'inquiries'), limit(50)));
       const inqItems: any[] = [];
       inqSnap.forEach((d) => inqItems.push(d.data()));
-      setInquiries(inqItems);
+      const localInqRaw = localStorage.getItem('etech_local_inquiries');
+      const localInqs: any[] = localInqRaw ? JSON.parse(localInqRaw) : [];
+      const map = new Map<string, any>();
+      [...inqItems, ...localInqs].forEach((inq) => map.set(inq.id, inq));
+      setInquiries(Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch {
-      // Local fallback
+      const localInqRaw = localStorage.getItem('etech_local_inquiries');
+      const localInqs: any[] = localInqRaw ? JSON.parse(localInqRaw) : [];
+      setInquiries(localInqs);
     }
 
-    // 4. Fetch Bookings
+    // 4. Fetch Bookings (merge cloud and local store)
     try {
       const bookSnap = await getDocs(query(collection(db, 'bookings'), limit(50)));
       const bookItems: BookingRecord[] = [];
       bookSnap.forEach((d) => bookItems.push(d.data() as BookingRecord));
-      setBookings(bookItems);
+      const localBookRaw = localStorage.getItem('etech_demo_user_bookings');
+      const localBooks: BookingRecord[] = localBookRaw ? JSON.parse(localBookRaw) : [];
+      const map = new Map<string, BookingRecord>();
+      [...bookItems, ...localBooks].forEach((b) => map.set(b.id, b));
+      setBookings(Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch {
-      // Local fallback
+      const localBookRaw = localStorage.getItem('etech_demo_user_bookings');
+      const localBooks: BookingRecord[] = localBookRaw ? JSON.parse(localBookRaw) : [];
+      setBookings(localBooks);
     }
 
     setIsLoading(false);
@@ -106,66 +122,125 @@ export const AdminPage: React.FC = () => {
     }
   }, [isAdmin]);
 
-  // If NOT authorized admin, show access locked view
+  const handleAdminEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    if (!adminInputEmail.trim()) return;
+
+    setIsSubmittingLogin(true);
+    const success = signInWithAdminDirect(adminInputEmail.trim());
+    setIsSubmittingLogin(false);
+
+    if (!success) {
+      setLoginError('Access Denied: The specified email does not have administrator permissions for E-tech Visuals.');
+    }
+  };
+
+  // If NOT authorized admin, show dedicated login gate
   if (!isAdmin) {
     return (
       <div className="min-h-[75vh] flex items-center justify-center p-4">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full rounded-2xl border border-red-900/60 bg-[#141613] p-8 text-center shadow-2xl space-y-6"
+          className="max-w-md w-full rounded-2xl border border-[#2C302A] bg-[#141613] p-8 text-center shadow-2xl space-y-6"
         >
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-950/50 border border-red-700/60 text-red-400">
-            <ShieldAlert className="h-8 w-8" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#C8FF45]/10 border border-[#C8FF45]/30 text-[#C8FF45]">
+            <ShieldCheck className="h-8 w-8" />
           </div>
 
           <div className="space-y-2">
-            <span className="font-mono text-xs font-bold uppercase tracking-wider text-red-400">
-              RESTRICTED ACCESS
+            <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#C8FF45]">
+              STUDIO ADMINISTRATION
             </span>
             <h1 className="font-display text-2xl font-bold text-[#F5F5F0]">
               Studio Command Center
             </h1>
             <p className="text-xs sm:text-sm text-[#C5C8C1] leading-relaxed">
-              This administrative dashboard is strictly restricted to designated studio owners. Only the following authorized accounts are permitted:
+              Sign in with your authorized administrator account to access real-time visitor activity, client briefs, and studio metrics.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#2C302A] bg-[#101110] p-4 text-xs font-mono text-left space-y-2 text-[#C8FF45]">
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#C8FF45]" />
-              <span>emperorstech885@gmail.com</span>
+          {loginError && (
+            <div className="rounded-xl border border-red-800/60 bg-red-950/40 p-3 text-xs text-red-300 text-left">
+              {loginError}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#C8FF45]" />
-              <span>ibarakumo2000@gmail.com</span>
-            </div>
-          </div>
+          )}
 
           {currentUser ? (
-            <div className="space-y-3 pt-2">
-              <p className="text-xs text-[#8A8E85]">
-                Currently signed in as: <strong className="text-[#F5F5F0]">{currentUser.email || 'Guest User'}</strong>
+            <div className="rounded-xl border border-amber-800/60 bg-amber-950/20 p-4 text-xs text-left space-y-3">
+              <p className="text-[#C5C8C1]">
+                Currently signed in as: <strong className="text-[#F5F5F0]">{currentUser.email || 'Guest Client'}</strong>
+              </p>
+              <p className="text-amber-400/90 text-[11px]">
+                This account does not have studio administrator rights. Please switch to an authorized owner account.
               </p>
               <button
                 type="button"
                 onClick={() => logout()}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#2C302A] bg-[#191B18] px-4 py-2.5 text-xs text-[#F5F5F0] hover:text-red-400 hover:border-red-800 transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[#2C302A] bg-[#191B18] px-4 py-2.5 text-xs text-[#F5F5F0] hover:text-red-400 hover:border-red-800 transition-colors cursor-pointer"
               >
                 <LogOut className="h-4 w-4" />
-                <span>Sign Out of Current Account</span>
+                <span>Sign Out & Switch Account</span>
               </button>
             </div>
           ) : (
-            <div className="space-y-3 pt-2">
+            <div className="space-y-4">
+              {/* Google Sign-In */}
               <button
                 type="button"
-                onClick={openAuthModal}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#C8FF45] px-5 py-3 text-xs font-bold uppercase tracking-wider text-[#101110] hover:bg-[#bbf033] transition-all cursor-pointer shadow-lg shadow-[#C8FF45]/15"
+                onClick={async () => {
+                  setLoginError(null);
+                  try {
+                    await signInWithGoogle();
+                  } catch (err: any) {
+                    setLoginError(err?.message || 'Google sign-in could not be completed.');
+                  }
+                }}
+                className="w-full inline-flex items-center justify-center gap-3 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 font-semibold px-4 py-3 text-xs transition-all shadow-md hover:shadow-lg cursor-pointer"
               >
-                <ShieldCheck className="h-4 w-4" />
-                <span>Authenticate Admin Google Account</span>
+                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Sign in with Studio Google Account</span>
               </button>
+
+              <div className="relative flex items-center justify-center my-3">
+                <div className="border-t border-[#2C302A] w-full" />
+                <span className="bg-[#141613] px-3 font-mono text-[10px] text-[#8A8E85] uppercase">
+                  or admin email
+                </span>
+                <div className="border-t border-[#2C302A] w-full" />
+              </div>
+
+              {/* Direct Admin Email Verification */}
+              <form onSubmit={handleAdminEmailSubmit} className="space-y-2.5 text-left">
+                <label className="block text-[11px] font-mono text-[#8A8E85]">
+                  STUDIO OWNER EMAIL
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@example.com"
+                  value={adminInputEmail}
+                  onChange={(e) => {
+                    setAdminInputEmail(e.target.value);
+                    if (loginError) setLoginError(null);
+                  }}
+                  className="w-full rounded-xl border border-[#2C302A] bg-[#101110] px-3.5 py-2.5 text-xs text-[#F5F5F0] placeholder-[#5a5e55] focus:border-[#C8FF45] focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmittingLogin}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#C8FF45] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[#101110] hover:bg-[#bbf033] transition-all cursor-pointer shadow-md shadow-[#C8FF45]/15 disabled:opacity-50"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Verify Administrator Access</span>
+                </button>
+              </form>
             </div>
           )}
 
