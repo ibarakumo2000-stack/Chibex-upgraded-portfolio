@@ -226,6 +226,144 @@ ${projectDetails}
   }
 });
 
+// In-memory rate limiter for AI Concierge: 30 requests per 10 minutes per IP
+const aiRateLimitMap = new Map<string, RateLimitRecord>();
+const aiRateLimiter = (req: Request, res: Response, next: () => void): void => {
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const maxRequests = 30;
+
+  const current = aiRateLimitMap.get(clientIp);
+  if (!current || now > current.resetAt) {
+    aiRateLimitMap.set(clientIp, { count: 1, resetAt: now + windowMs });
+    next();
+    return;
+  }
+
+  if (current.count >= maxRequests) {
+    res.status(429).json({
+      error: 'RATE_LIMIT_EXCEEDED',
+      reply: 'You have sent quite a few messages recently. Please wait a few moments before continuing.',
+    });
+    return;
+  }
+
+  current.count += 1;
+  next();
+};
+
+const STUDIO_AI_SYSTEM_PROMPT = `You are the E-Tech AI Website Concierge for "E-Tech Graphics" (also known as E-tech Visuals), a high-end graphic design studio creating bold visuals, brand identities, posters, social campaigns, and print editorial design.
+
+Your Tone & Rules:
+- Warm, professional, design-literate, and concise (2-4 clear sentences).
+- Help visitors understand our services, explore our 16 curated concept projects, and book a free 30-minute consultation.
+- WhatsApp number: 07038373011 (+2347038373011).
+- Free Discovery Call: 30 minutes via Google Meet, $0 investment, no obligation.
+- Portfolio items are concept projects showing studio caliber. Always clarify this if asked.
+- Never invent prices, completed commercial client names, or guarantee calendar dates.
+
+Allowlisted Action Tokens:
+Include these tokens at the end of your response when appropriate:
+- [ACTION:navigate:projects] (to view projects gallery)
+- [ACTION:navigate:services] (to view design services)
+- [ACTION:navigate:about] (to view studio philosophy)
+- [ACTION:navigate:contact] (to open contact form)
+- [ACTION:modal:booking] (to open 30-min booking modal)
+- [ACTION:action:whatsapp] (to open WhatsApp chat)
+- [ACTION:project:solaris-dusk-poster] (for Solaris Dusk key art)
+- [ACTION:project:echo-system-2025-flyer] (for Echo System flyer)
+- [ACTION:project:lumina-studio-brand] (for Lumina brand identity)`;
+
+// API: AI Chat endpoint (supports OPENAI_API_KEY, GEMINI_API_KEY, or built-in intelligent studio fallback)
+app.post('/api/ai/chat', aiRateLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rawMessages = req.body?.messages;
+
+    if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
+      res.status(400).json({ error: 'INVALID_PAYLOAD', reply: 'Please provide a valid conversation thread.' });
+      return;
+    }
+
+    // Sanitize and limit context length (max 10 recent messages, max 1000 chars per message)
+    const sanitizedMessages = rawMessages
+      .slice(-10)
+      .map((m: any) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: String(m.content || '').slice(0, 1000),
+      }))
+      .filter((m) => m.content.trim().length > 0);
+
+    const lastUserQuery = sanitizedMessages[sanitizedMessages.length - 1]?.content || '';
+    const openAiApiKey = process.env.OPENAI_API_KEY;
+
+    // 1. Try OpenAI if API key is provided
+    if (openAiApiKey && openAiApiKey.trim() !== '' && !openAiApiKey.includes('your_openai_api_key')) {
+      try {
+        const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: STUDIO_AI_SYSTEM_PROMPT },
+              ...sanitizedMessages,
+            ],
+            temperature: 0.7,
+            max_tokens: 300,
+          }),
+        });
+
+        if (openAiRes.ok) {
+          const aiData: any = await openAiRes.json();
+          const replyText = aiData?.choices?.[0]?.message?.content || '';
+          if (replyText) {
+            res.status(200).json({ reply: replyText });
+            return;
+          }
+        } else {
+          const errDetail = await openAiRes.text().catch(() => '');
+          console.warn('[OpenAI Chat Notice]:', openAiRes.status, errDetail);
+        }
+      } catch (openAiErr) {
+        console.warn('[OpenAI Request Error]:', openAiErr);
+      }
+    }
+
+    // 2. Intelligent Studio Fallback response engine
+    const query = lastUserQuery.toLowerCase();
+    let reply = '';
+
+    if (query.includes('book') || query.includes('call') || query.includes('schedule') || query.includes('consult')) {
+      reply = "We offer a 100% free 30-minute introductory strategy session! We will review your project scope, target aesthetic, timeline, and deliverables over Google Meet with zero obligation.\n\nWould you like to reserve a time slot right now?\n[ACTION:modal:booking]";
+    } else if (query.includes('whatsapp') || query.includes('phone') || query.includes('chat') || query.includes('contact')) {
+      reply = "You can message E-Tech Graphics directly on WhatsApp at 07038373011 (+2347038373011) or send us a project inquiry through our contact page.\n\n[ACTION:action:whatsapp] [ACTION:navigate:contact]";
+    } else if (query.includes('service') || query.includes('offer') || query.includes('capability') || query.includes('what do you do')) {
+      reply = "E-Tech Graphics specializes in 5 core disciplines:\n1. Brand Identity Systems (Logos, guidelines, visual language)\n2. Cinematic Film & Exhibition Posters\n3. Event & Concert Flyers\n4. Social Media Campaign Graphics\n5. Digital & Print Design (Banners, brochures, editorial layouts)\n\n[ACTION:navigate:services] [ACTION:modal:booking]";
+    } else if (query.includes('project') || query.includes('work') || query.includes('portfolio') || query.includes('poster') || query.includes('flyer')) {
+      reply = "Our portfolio features 16 curated visual concepts spanning sci-fi film key art (Solaris Dusk, The Silent Abyss), brutalist electronic club flyers (Echo System 2025), luxury brand identities, and wide-format banners.\n\n[ACTION:navigate:projects] [ACTION:project:solaris-dusk-poster]";
+    } else if (query.includes('price') || query.includes('cost') || query.includes('rate') || query.includes('budget')) {
+      reply = "Every project is quoted transparently based on deliverables and complexity—from single posters to comprehensive visual identities. The best starting point is our free 30-minute discovery call where we can discuss your budget.\n\n[ACTION:modal:booking] [ACTION:navigate:contact]";
+    } else if (query.includes('about') || query.includes('who') || query.includes('philosophy')) {
+      reply = "At E-Tech Graphics, design is not decorative veneer—it is the structural grammar through which an idea communicates its value. We build bold, intentional visual systems engineered for clarity and lasting resonance.\n\n[ACTION:navigate:about] [ACTION:navigate:projects]";
+    } else {
+      reply = "I'm your creative concierge at E-Tech Graphics. I can help you explore our design services, view our 16 portfolio concepts, or schedule a free 30-minute strategy call. What would you like to explore?\n\n[ACTION:navigate:projects] [ACTION:navigate:services] [ACTION:modal:booking]";
+    }
+
+    res.status(200).json({ reply });
+  } catch (error) {
+    console.error('[Error in /api/ai/chat]:', error);
+    res.status(500).json({
+      error: 'CHAT_ERROR',
+      reply: 'Our creative assistant encountered a temporary issue. You can explore our works or book a free call directly below:\n\n[ACTION:navigate:projects] [ACTION:modal:booking]',
+    });
+  }
+});
+
+
 // Setup Vite in Dev or Static files in Prod
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';

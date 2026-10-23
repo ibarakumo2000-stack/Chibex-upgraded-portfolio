@@ -9,6 +9,7 @@ import { Header } from './components/navigation/Header';
 import { Footer } from './components/footer/Footer';
 import { ScrollToTop } from './components/common/ScrollToTop';
 import { FloatingWhatsApp } from './components/common/FloatingWhatsApp';
+import { WebsiteConcierge } from './components/ai/WebsiteConcierge';
 import { Project } from './types/portfolio';
 
 // Individual Pages
@@ -48,6 +49,12 @@ export default function App() {
 
           {/* Global Floating WhatsApp Direct Message Button */}
           <FloatingWhatsApp />
+
+          {/* Global Floating AI Creative Concierge */}
+          <WebsiteConcierge
+            onOpenBooking={() => setGlobalBookingOpen(true)}
+            onOpenProject={(proj) => setGlobalActiveProject(proj)}
+          />
 
           {/* Client Authentication & Hub Drawers */}
           <AuthModal />
