@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'ibarakumo2000@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validation: UserProfile
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'email']) &&
+        data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+        data.id is string && data.id == request.auth.uid &&
+        data.email is string && data.email.size() <= 100 &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500));
+    }
+
+    // Entity Validation: Booking
+    function isValidBooking(data) {
+      return data.keys().hasAll(['id', 'userId', 'userEmail', 'serviceInterest', 'date', 'timeSlot', 'status']) &&
+        data.keys().hasOnly(['id', 'userId', 'userName', 'userEmail', 'serviceInterest', 'date', 'timeSlot', 'notes', 'status', 'createdAt', 'updatedAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.userEmail is string && data.userEmail.size() <= 100 &&
+        data.serviceInterest is string && data.serviceInterest.size() <= 100 &&
+        data.date is string && data.date.size() <= 20 &&
+        data.timeSlot is string && data.timeSlot.size() <= 20 &&
+        data.status in ['confirmed', 'completed', 'cancelled'] &&
+        (!('userName' in data) || (data.userName is string && data.userName.size() <= 100)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
+    }
+
+    // Entity Validation: SavedProject
+    function isValidSavedProject(data) {
+      return data.keys().hasAll(['id', 'userId', 'projectId', 'projectTitle', 'category']) &&
+        data.keys().hasOnly(['id', 'userId', 'projectId', 'projectTitle', 'category', 'imageUrl', 'notes', 'savedAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.projectId is string && data.projectId.size() <= 100 &&
+        data.projectTitle is string && data.projectTitle.size() <= 150 &&
+        data.category is string && data.category.size() <= 100 &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 500));
+    }
+
+    // Entity Validation: Inquiry
+    function isValidInquiry(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'service', 'message']) &&
+        data.keys().hasOnly(['id', 'userId', 'name', 'email', 'service', 'budget', 'timeline', 'message', 'status', 'createdAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() > 0 && data.email.size() <= 100 &&
+        data.service is string && data.service.size() <= 100 &&
+        data.message is string && data.message.size() > 0 && data.message.size() <= 2000 &&
+        (!('userId' in data) || (data.userId is string && (!isSignedIn() || data.userId == request.auth.uid))) &&
+        (!('budget' in data) || (data.budget is string && data.budget.size() <= 50)) &&
+        (!('timeline' in data) || (data.timeline is string && data.timeline.size() <= 50)) &&
+        (!('status' in data) || data.status in ['new', 'reviewed', 'archived']);
+    }
+
+    // Collection: Users
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUserProfile(incoming()) &&
+                    incoming().id == existing().id;
+      allow delete: if isAdmin();
+    }
+
+    // Collection: Bookings
+    match /bookings/{bookingId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && isValidId(bookingId) && isValidBooking(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if (isSignedIn() && isValidBooking(incoming()) && incoming().userId == existing().userId && (
+        (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']) && incoming().status in ['cancelled']) ||
+        isAdmin()
+      ));
+      allow delete: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+    }
+
+    // Collection: Saved Projects (Moodboard)
+    match /savedProjects/{saveId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && isValidId(saveId) && isValidSavedProject(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidSavedProject(incoming()) &&
+                    incoming().userId == existing().userId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['notes']);
+      allow delete: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
+    }
+
+    // Collection: Inquiries
+    match /inquiries/{inquiryId} {
+      allow get: if (isSignedIn() && ('userId' in existing()) && existing().userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && ('userId' in resource.data) && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
+      allow update: if isAdmin() && isValidInquiry(incoming());
+      allow delete: if isAdmin();
+    }
+  }
+}

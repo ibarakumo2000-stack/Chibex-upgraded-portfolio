@@ -1,0 +1,212 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile for E-tech Visuals client portal",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase Auth UID"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "User display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "User avatar photo URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when profile was created"
+        }
+      },
+      "required": ["id", "email"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Scheduled free 30-minute creative consultation call",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique booking document ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the user who booked"
+        },
+        "userName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Name of the client"
+        },
+        "userEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Client email for calendar invite"
+        },
+        "serviceInterest": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Design service client is interested in"
+        },
+        "date": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "Selected consultation date (YYYY-MM-DD)"
+        },
+        "timeSlot": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "Selected consultation time slot (e.g. 14:00 GMT)"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Project goals and briefing notes"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["confirmed", "completed", "cancelled"],
+          "description": "Current status of the booking"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Booking submission timestamp"
+        }
+      },
+      "required": ["id", "userId", "userEmail", "serviceInterest", "date", "timeSlot", "status"]
+    },
+    "SavedProject": {
+      "title": "SavedProject",
+      "description": "Bookmarked portfolio project in client moodboard",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique saved project document ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the user who saved the project"
+        },
+        "projectId": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Portfolio project identifier"
+        },
+        "projectTitle": {
+          "type": "string",
+          "maxLength": 150,
+          "description": "Title of the saved project"
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Category of the saved project"
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Thumbnail or preview image URL"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Client personal notes or creative references"
+        },
+        "savedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when project was bookmarked"
+        }
+      },
+      "required": ["id", "userId", "projectId", "projectTitle", "category"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "Design project quote request or direct inquiry",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique inquiry document ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the submitting user or anonymous lead"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Contact person name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Contact email"
+        },
+        "service": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Requested design service"
+        },
+        "budget": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Estimated budget tier"
+        },
+        "timeline": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Project timeline"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Project brief and details"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["new", "reviewed", "archived"],
+          "description": "Status of the inquiry"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Submission timestamp"
+        }
+      },
+      "required": ["id", "name", "email", "service", "message"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Individual client user profile documents"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Creative consultation calls scheduled with E-tech Visuals"
+    },
+    "/savedProjects/{saveId}": {
+      "schema": "SavedProject",
+      "description": "Projects bookmarked into client moodboard"
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": "Inquiry",
+      "description": "Project quote and custom inquiries"
+    }
+  }
+}
