@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, Bookmark, Sparkles, User as UserIcon } from 'lucide-react';
+import { Menu, Bookmark, Sparkles, User as UserIcon, ShieldCheck } from 'lucide-react';
 import { siteConfig } from '../../data/site-config';
 import { MobileMenu } from './MobileMenu';
 import { useAuth } from '../../context/AuthContext';
@@ -9,7 +9,7 @@ export const Header: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
-  const { currentUser, openAuthModal, openHub, savedProjects, userBookings } = useAuth();
+  const { currentUser, openAuthModal, openHub, savedProjects, userBookings, isAdmin } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -67,6 +67,18 @@ export const Header: React.FC = () => {
 
             {/* Zone 3: Client Hub / Auth & Primary CTA */}
             <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+              {/* Admin Panel Direct Link (Only visible to emperorstech885@gmail.com and ibarakumo2000@gmail.com) */}
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="flex items-center gap-1.5 rounded-lg border border-[#C8FF45]/60 bg-[#C8FF45]/15 px-2.5 sm:px-3 py-1.5 text-xs font-mono font-bold text-[#C8FF45] hover:bg-[#C8FF45]/25 transition-all shadow-sm"
+                  title="Studio Command Center"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#C8FF45]" />
+                  <span className="hidden sm:inline">Admin Panel</span>
+                </Link>
+              )}
+
               {/* Client Auth / Portal Button */}
               {currentUser ? (
                 <button

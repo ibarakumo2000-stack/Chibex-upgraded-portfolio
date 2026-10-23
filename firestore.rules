@@ -17,7 +17,8 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == 'ibarakumo2000@gmail.com' && request.auth.token.email_verified == true;
+      return isSignedIn() &&
+        (request.auth.token.email in ['ibarakumo2000@gmail.com', 'emperorstech885@gmail.com']);
     }
 
     function isValidId(id) {
@@ -85,6 +86,22 @@ service cloud.firestore {
         (!('status' in data) || data.status in ['new', 'reviewed', 'archived']);
     }
 
+    // Entity Validation: ActivityLog
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['id', 'sessionId', 'action', 'page', 'timestamp']) &&
+        data.keys().hasOnly(['id', 'sessionId', 'userId', 'userEmail', 'action', 'details', 'page', 'referrer', 'device', 'timestamp']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.sessionId is string && data.sessionId.size() <= 100 &&
+        data.action is string && data.action.size() <= 100 &&
+        data.page is string && data.page.size() <= 100 &&
+        data.timestamp is string && data.timestamp.size() <= 40 &&
+        (!('userId' in data) || (data.userId is string && data.userId.size() <= 128)) &&
+        (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 100)) &&
+        (!('details' in data) || (data.details is string && data.details.size() <= 500)) &&
+        (!('referrer' in data) || (data.referrer is string && data.referrer.size() <= 300)) &&
+        (!('device' in data) || (data.device is string && data.device.size() <= 50));
+    }
+
     // Collection: Users
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
@@ -98,7 +115,7 @@ service cloud.firestore {
     // Collection: Bookings
     match /bookings/{bookingId} {
       allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
       allow create: if isSignedIn() && isValidId(bookingId) && isValidBooking(incoming()) && incoming().userId == request.auth.uid;
       allow update: if (isSignedIn() && isValidBooking(incoming()) && incoming().userId == existing().userId && (
         (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']) && incoming().status in ['cancelled']) ||
@@ -110,7 +127,7 @@ service cloud.firestore {
     // Collection: Saved Projects (Moodboard)
     match /savedProjects/{saveId} {
       allow get: if (isSignedIn() && existing().userId == request.auth.uid) || isAdmin();
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
       allow create: if isSignedIn() && isValidId(saveId) && isValidSavedProject(incoming()) && incoming().userId == request.auth.uid;
       allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidSavedProject(incoming()) &&
                     incoming().userId == existing().userId &&
@@ -125,6 +142,13 @@ service cloud.firestore {
       allow create: if isValidId(inquiryId) && isValidInquiry(incoming());
       allow update: if isAdmin() && isValidInquiry(incoming());
       allow delete: if isAdmin();
+    }
+
+    // Collection: Activity Logs (Consented Visitor & User Actions)
+    match /activityLogs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(logId) && isValidActivityLog(incoming());
+      allow update, delete: if isAdmin();
     }
   }
 }

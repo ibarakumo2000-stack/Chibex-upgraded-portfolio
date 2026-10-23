@@ -23,6 +23,7 @@ import {
 import { BookingModal } from '../booking/BookingModal';
 import { WhatsAppButton } from '../common/WhatsAppButton';
 import { useAuth } from '../../context/AuthContext';
+import { trackActivity } from '../../lib/analytics';
 
 interface ContactSectionProps {
   preselectedService?: string;
@@ -132,6 +133,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
         });
       } else {
         setSubmissionResult(data);
+        trackActivity(
+          'inquiry_submitted',
+          `Contact form inquiry from ${formData.fullName} (${formData.email}) for ${formData.serviceNeeded} [Budget: ${formData.budgetRange}]`
+        );
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Network error';

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AuthModal } from './components/auth/AuthModal';
 import { ClientHubDrawer } from './components/portal/ClientHubDrawer';
@@ -10,7 +10,9 @@ import { Footer } from './components/footer/Footer';
 import { ScrollToTop } from './components/common/ScrollToTop';
 import { FloatingWhatsApp } from './components/common/FloatingWhatsApp';
 import { WebsiteConcierge } from './components/ai/WebsiteConcierge';
+import { CookieConsentBanner } from './components/common/CookieConsentBanner';
 import { Project } from './types/portfolio';
+import { trackActivity } from './lib/analytics';
 
 // Individual Pages
 import { HomePage } from './pages/HomePage';
@@ -18,6 +20,18 @@ import { WorkPage } from './pages/WorkPage';
 import { ServicesPage } from './pages/ServicesPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
+import { AdminPage } from './pages/AdminPage';
+
+// Automatic route-level visitor telemetry component
+function PageTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    trackActivity('page_view', `Visited ${location.pathname}`);
+  }, [location.pathname]);
+
+  return null;
+}
 
 export default function App() {
   const [globalBookingOpen, setGlobalBookingOpen] = useState(false);
@@ -27,6 +41,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ScrollToTop />
+        <PageTracker />
         <div className="min-h-screen flex flex-col bg-[#101110] text-[#F5F5F0]">
           {/* Top Bar Navigation */}
           <Header />
@@ -39,6 +54,8 @@ export default function App() {
               <Route path="/services" element={<ServicesPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              {/* Studio Command Center (restricted to emperorstech885@gmail.com and ibarakumo2000@gmail.com) */}
+              <Route path="/admin" element={<AdminPage />} />
               {/* Catch-all route gracefully navigates to Home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
@@ -62,6 +79,9 @@ export default function App() {
             onOpenBooking={() => setGlobalBookingOpen(true)}
             onOpenProject={(proj) => setGlobalActiveProject(proj)}
           />
+
+          {/* Interactive Cookie Consent Banner for User Tracking */}
+          <CookieConsentBanner />
 
           {/* Global Modals for Booking & Projects triggered from Hub */}
           <BookingModal

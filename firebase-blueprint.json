@@ -189,6 +189,63 @@
         }
       },
       "required": ["id", "name", "email", "service", "message"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Cookie-consented visitor and user activity tracking log for studio admin insights",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique activity log document ID"
+        },
+        "sessionId": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Browser session identifier"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Optional user UID if authenticated"
+        },
+        "userEmail": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Optional user email if authenticated"
+        },
+        "action": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Action category (e.g., page_view, view_project, bookmark_project, booking_click, inquiry_submit)"
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of the specific action or asset interacted with"
+        },
+        "page": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "URL path visited"
+        },
+        "referrer": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Document referrer"
+        },
+        "device": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Visitor device category (Desktop/Mobile/Tablet)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when action occurred"
+        }
+      },
+      "required": ["id", "sessionId", "action", "page", "timestamp"]
     }
   },
   "firestore": {
@@ -207,6 +264,10 @@
     "/inquiries/{inquiryId}": {
       "schema": "Inquiry",
       "description": "Project quote and custom inquiries"
+    },
+    "/activityLogs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Consented user and visitor engagement logs viewable by studio administrators"
     }
   }
 }

@@ -23,6 +23,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { Project } from '../types/portfolio';
+import { trackActivity } from '../lib/analytics';
 
 export interface BookingRecord {
   id: string;
@@ -137,9 +138,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentUser = firebaseUser || demoUser;
   const isDemoClient = Boolean(!firebaseUser && demoUser);
 
-  // Check admin privileges (runtime user email)
+  // Check admin privileges (only emperorstech885@gmail.com and ibarakumo2000@gmail.com)
   const isAdmin = useMemo(() => {
-    return currentUser?.email === 'ibarakumo2000@gmail.com';
+    const adminList = ['ibarakumo2000@gmail.com', 'emperorstech885@gmail.com'];
+    return Boolean(currentUser?.email && adminList.includes(currentUser.email.toLowerCase().trim()));
   }, [currentUser]);
   // Initial connection test
   useEffect(() => {
@@ -271,8 +273,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async () => {
     setAuthError(null);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const cred = await signInWithPopup(auth, googleProvider);
       setIsAuthModalOpen(false);
+      trackActivity('user_sign_in', `Signed in via Google (${cred.user.email || 'Client'})`);
     } catch (error: any) {
       console.warn('Google sign-in attempt notice:', error);
       const code = error?.code || '';
@@ -311,6 +314,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
     setIsAuthModalOpen(false);
     setIsHubOpen(true);
+    trackActivity('client_sign_in', `Client authenticated as ${demo.email}`);
   };
 
   // Sign-Out
@@ -372,6 +376,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       localStorage.setItem(`etech_saved_${currentUser.uid}`, JSON.stringify(nextProjects));
     } catch {}
+
+    // Track moodboard interaction telemetry
+    trackActivity(
+      isSaved ? 'moodboard_add' : 'moodboard_remove',
+      `${isSaved ? 'Saved' : 'Removed'} "${project.title}" (${project.category})`
+    );
 
     // Cloud Firestore write when Firebase auth is available
     if (firebaseUser) {
@@ -457,6 +467,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(`etech_bookings_${currentUser.uid}`, JSON.stringify(nextBookings));
     } catch {}
 
+    // Record booking activity telemetry
+    trackActivity(
+      'booking_created',
+      `Reserved ${data.serviceInterest} on ${data.date} at ${data.timeSlot}`
+    );
+
     if (firebaseUser) {
       const path = 'bookings';
       try {
@@ -481,6 +497,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(`etech_bookings_${currentUser.uid}`, JSON.stringify(nextBookings));
     } catch {}
 
+    // Record booking cancellation telemetry
+    trackActivity('booking_cancelled', `Cancelled call reservation ID ${bookingId}`);
+
     if (firebaseUser) {
       const path = 'bookings';
       try {
@@ -503,6 +522,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     message: string;
   }): Promise<string> => {
     const inquiryId = `inq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // Record inquiry activity telemetry
+    trackActivity(
+      'inquiry_submitted',
+      `Brief sent by ${data.name} (${data.email}) for ${data.service} (Budget: ${data.budget || 'Flexible'})`
+    );
 
     // Always deliver to backend contact endpoint
     fetch('/api/contact', {

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { X, CheckCircle, Sparkles, ArrowRight } from 'lucide-react';
 import { Project } from '../../types/portfolio';
+import { trackActivity } from '../../lib/analytics';
 
 interface ProjectModalProps {
   project: Project | null;
@@ -18,6 +19,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
   useEffect(() => {
     if (!project) return;
+
+    // Track user viewing project
+    trackActivity('view_project', `Inspected ${project.title} (${project.category})`);
 
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';

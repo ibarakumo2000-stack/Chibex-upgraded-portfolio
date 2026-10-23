@@ -19,6 +19,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { siteConfig } from '../../data/site-config';
 import { sampleProjects } from '../../data/projects';
 import { Project } from '../../types/portfolio';
+import { trackActivity } from '../../lib/analytics';
 
 export interface ChatMessage {
   id: string;
@@ -258,6 +259,9 @@ export const WebsiteConcierge: React.FC<WebsiteConciergeProps> = ({
     setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
+
+    // Record concierge chat interaction
+    trackActivity('ai_concierge_query', `Prompt: "${query.slice(0, 100)}"`);
 
     // Keep context bounded (max recent 10 messages)
     const recentHistory = [...messages, userMessage].slice(-10).map((m) => ({

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { X, ArrowRight, Sparkles, Bookmark, User as UserIcon } from 'lucide-react';
+import { X, ArrowRight, Sparkles, Bookmark, User as UserIcon, ShieldCheck } from 'lucide-react';
 import { siteConfig } from '../../data/site-config';
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,7 +13,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({ isOpen, onClose }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const firstFocusableRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
-  const { currentUser, openAuthModal, openHub, savedProjects } = useAuth();
+  const { currentUser, openAuthModal, openHub, savedProjects, isAdmin } = useAuth();
 
   // Body scroll lock
   useEffect(() => {
@@ -99,6 +99,18 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({ isOpen, onClose }) => {
             <span>Start a Project</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
+
+          {/* Admin Command Center Link */}
+          {isAdmin && (
+            <Link
+              to="/admin"
+              onClick={onClose}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#C8FF45]/60 bg-[#C8FF45]/15 py-3 px-6 text-sm font-mono font-bold text-[#C8FF45] hover:bg-[#C8FF45]/25 transition-all"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              <span>Studio Command Center</span>
+            </Link>
+          )}
 
           {currentUser ? (
             <button

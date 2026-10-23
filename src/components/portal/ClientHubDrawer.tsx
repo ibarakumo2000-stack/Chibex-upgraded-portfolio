@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -12,6 +13,7 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { sampleProjects } from '../../data/projects';
@@ -41,6 +43,7 @@ export const ClientHubDrawer: React.FC<ClientHubDrawerProps> = ({
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'bookings' | 'moodboard' | 'inquiry'>('bookings');
+  const navigate = useNavigate();
 
   // Inquiry form states
   const [inquiryName, setInquiryName] = useState(currentUser?.displayName || '');
@@ -152,6 +155,31 @@ export const ClientHubDrawer: React.FC<ClientHubDrawerProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Admin Command Center Quick Access */}
+          {isAdmin && (
+            <div className="mx-4 mt-3 p-3 rounded-xl border border-[#C8FF45]/50 bg-[#C8FF45]/10 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-[#C8FF45]/20 flex items-center justify-center text-[#C8FF45]">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-xs text-[#F5F5F0]">Studio Command Center</p>
+                  <p className="text-[10px] text-[#C5C8C1]">Live visitor telemetry & activity feed</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  closeHub();
+                  navigate('/admin');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-[#C8FF45] text-[#101110] font-bold text-xs hover:bg-[#d6ff6a] transition-colors cursor-pointer shrink-0"
+              >
+                Launch &rarr;
+              </button>
+            </div>
+          )}
 
           {/* Navigation Tabs */}
           <div className="flex border-b border-[#2C302A] bg-[#101110]/50 p-1.5 gap-1 text-xs">

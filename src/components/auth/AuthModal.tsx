@@ -203,19 +203,43 @@ export const AuthModal: React.FC = () => {
               <span>Continue with Google</span>
             </button>
 
-            {/* Instant Demo Client Access Button */}
-            <button
-              type="button"
-              onClick={() => signInWithDemoClient()}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-[#2C302A] bg-[#191B18] hover:border-[#C8FF45] hover:bg-[#1f221d] text-[#F5F5F0] hover:text-[#C8FF45] font-medium px-4 py-2.5 text-xs transition-all cursor-pointer"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-[#C8FF45]" />
-              <span>Instant Demo Client Access (Preview Mode)</span>
-            </button>
+            {/* Instant Demo Client & Admin Testing Options */}
+            <div className="pt-1 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => signInWithDemoClient('Ibarakumo (Admin)', 'ibarakumo2000@gmail.com')}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-[#C8FF45]/40 bg-[#C8FF45]/10 hover:bg-[#C8FF45]/20 text-[#C8FF45] font-mono font-medium px-2.5 py-2 text-[11px] transition-all cursor-pointer"
+                  title="Test Admin Access as ibarakumo2000@gmail.com"
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  <span>Admin: ibarakumo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => signInWithDemoClient('Emperor (Admin)', 'emperorstech885@gmail.com')}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-[#C8FF45]/40 bg-[#C8FF45]/10 hover:bg-[#C8FF45]/20 text-[#C8FF45] font-mono font-medium px-2.5 py-2 text-[11px] transition-all cursor-pointer"
+                  title="Test Admin Access as emperorstech885@gmail.com"
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  <span>Admin: emperor</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => signInWithDemoClient('Visitor Client', 'client.visitor@example.com')}
+                className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#2C302A] bg-[#191B18] hover:border-[#38bdf8] text-[#C5C8C1] hover:text-[#38bdf8] font-medium px-3 py-2 text-xs transition-all cursor-pointer"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-[#38bdf8]" />
+                <span>Standard Client Preview (No Admin Access)</span>
+              </button>
+            </div>
 
             <button
               onClick={closeAuthModal}
-              className="w-full text-center text-xs text-[#8A8E85] hover:text-[#C5C8C1] py-1.5 transition-colors cursor-pointer"
+              className="w-full text-center text-xs text-[#8A8E85] hover:text-[#C5C8C1] py-1 transition-colors cursor-pointer"
             >
               Continue browsing portfolio as guest
             </button>
