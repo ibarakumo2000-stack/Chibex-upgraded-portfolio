@@ -83,10 +83,14 @@ export const DownloadPage: React.FC = () => {
     void loadRelease();
   }, [loadRelease]);
 
-  const assetsByPlatform = new Map<Platform, ReleaseAsset>();
+  const assetsByPlatform = new Map<Platform, ReleaseAsset[]>();
   release?.assets.forEach((asset) => {
     const platform = assetPlatform(asset.name);
-    if (platform && !assetsByPlatform.has(platform)) assetsByPlatform.set(platform, asset);
+    if (platform) {
+      const current = assetsByPlatform.get(platform) ?? [];
+      current.push(asset);
+      assetsByPlatform.set(platform, current);
+    }
   });
 
   return (
@@ -150,8 +154,8 @@ export const DownloadPage: React.FC = () => {
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
             {(Object.keys(platformInfo) as Platform[]).map((platform) => {
               const info = platformInfo[platform];
-              const asset = assetsByPlatform.get(platform);
-              const available = Boolean(asset);
+              const assets = assetsByPlatform.get(platform) ?? [];
+              const available = assets.length > 0;
               return (
                 <article key={platform} className={`flex min-h-64 flex-col rounded-xl border p-5 sm:p-6 transition-colors ${available ? 'border-[#C8FF45]/40 bg-[#191D16]' : 'border-[#2C302A] bg-[#151714]'}`}>
                   <div className="flex items-start justify-between gap-3">
@@ -164,23 +168,26 @@ export const DownloadPage: React.FC = () => {
                   </div>
                   <h3 className="mt-5 font-display text-xl font-bold text-[#F5F5F0]">{info.title}</h3>
                   <p className="mt-2 text-xs leading-5 text-[#A8ADA3]">{info.description}</p>
-                  {asset && (
-                    <div className="mt-3 text-[11px] text-[#A8ADA3]">
-                      <p className="break-all">{asset.name}</p>
-                      <p className="mt-1">{formatSize(asset.size)} · verify with SHA256SUMS.txt from this release</p>
+                  {assets.length > 0 && (
+                    <div className="mt-3 space-y-2 text-[11px] text-[#A8ADA3]">
+                      {assets.map((asset) => (
+                        <div key={asset.name} className="rounded-lg border border-[#2C302A] p-2.5">
+                          <p className="break-all">{asset.name}</p>
+                          <p className="mt-1">{formatSize(asset.size)} · verify with SHA256SUMS.txt from this release</p>
+                          <a href={asset.browser_download_url} className="mt-2 inline-flex items-center gap-2 font-bold text-[#C8FF45] hover:underline">
+                            <ArrowDownToLine className="h-3.5 w-3.5" /> Download {platform === 'macos' ? (asset.name.toLowerCase().includes('arm64') ? 'Apple Silicon' : 'Intel') : info.title}
+                          </a>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <div className="mt-auto pt-6">
-                    {asset ? (
-                      <a href={asset.browser_download_url} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#C8FF45] px-4 py-3 text-xs font-extrabold text-[#101110] transition hover:bg-[#d8ff78]">
-                        <ArrowDownToLine className="h-4 w-4" /> Download for {info.title}
-                      </a>
-                    ) : (
+                  {!available && (
+                    <div className="mt-auto pt-6">
                       <a href={RELEASES_PAGE} target="_blank" rel="noreferrer" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#2C302A] px-4 py-3 text-xs font-bold text-[#C5C8C1] transition hover:border-[#C8FF45] hover:text-[#C8FF45]">
                         View release status <ArrowUpRight className="h-3.5 w-3.5" />
                       </a>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </article>
               );
             })}
