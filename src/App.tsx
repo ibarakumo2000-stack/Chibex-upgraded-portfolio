@@ -21,6 +21,7 @@ import { ServicesPage } from './pages/ServicesPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { AdminPage } from './pages/AdminPage';
+import { DownloadPage } from './pages/DownloadPage';
 
 // Automatic route-level visitor telemetry component
 function PageTracker() {
@@ -54,6 +55,7 @@ export default function App() {
               <Route path="/services" element={<ServicesPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/download" element={<DownloadPage />} />
               {/* Studio Command Center (restricted to emperorstech885@gmail.com and ibarakumo2000@gmail.com) */}
               <Route path="/admin" element={<AdminPage />} />
               {/* Catch-all route gracefully navigates to Home */}
