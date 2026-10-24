@@ -5,7 +5,7 @@
 
 export interface SocialLink {
   label: string;
-  url: string | null;
+  url: string | null; // Set to null if unavailable; UI gracefully disables or hides it
   handle: string;
 }
 
@@ -26,12 +26,14 @@ export const siteConfig = {
     { label: 'About', href: '/about' },
     { label: 'Contact', href: '/contact' },
   ],
+  // Updated studio contact details
   contact: {
     emailPlaceholder: 'emperorstech885@gmail.com',
     phonePlaceholder: '07038373011',
     locationPlaceholder: 'Remote & Global / Available Worldwide',
     responseCommitment: 'Inquiries answered within 24–48 hours on business days.',
   },
+  // Scheduling provider configuration
   booking: {
     url: (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_BOOKING_URL) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BOOKING_URL) || '',
     duration: '30 Minutes',
@@ -39,6 +41,7 @@ export const siteConfig = {
     title: 'Book a Free 30-Minute Call',
     description: 'Direct 1-on-1 strategy session to review your brand goals, project scope, budget, and creative direction.',
   },
+  // WhatsApp click-to-chat configuration
   whatsapp: {
     number: (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_WHATSAPP_NUMBER) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_WHATSAPP_NUMBER) || '2347038373011',
     displayNumber: '07038373011',
@@ -50,10 +53,26 @@ export const siteConfig = {
     },
   },
   socials: [
-    { label: 'Instagram', url: 'https://instagram.com', handle: '@etechgraphics' },
-    { label: 'Behance', url: 'https://behance.net', handle: 'etechgraphics' },
-    { label: 'LinkedIn', url: 'https://linkedin.com', handle: 'E-Tech Graphics' },
-    { label: 'Dribbble', url: null, handle: 'Coming soon' },
+    {
+      label: 'Instagram',
+      url: 'https://instagram.com', // Replace with real Instagram profile
+      handle: '@etechgraphics',
+    },
+    {
+      label: 'Behance',
+      url: 'https://behance.net', // Replace with real Behance portfolio
+      handle: 'etechgraphics',
+    },
+    {
+      label: 'LinkedIn',
+      url: 'https://linkedin.com', // Replace with real LinkedIn page
+      handle: 'E-Tech Graphics',
+    },
+    {
+      label: 'Dribbble',
+      url: null, // Disabled placeholder - demonstrates graceful handling of unconfigured channels
+      handle: 'Coming soon',
+    },
   ] as SocialLink[],
   philosophy: {
     statement: 'We turn ideas into purposeful visual experiences—combining clear communication, thoughtful composition, and distinctive design.',
