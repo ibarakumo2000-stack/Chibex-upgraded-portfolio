@@ -30,12 +30,12 @@ const platformInfo: Record<Platform, { title: string; description: string; icon:
   },
   linux: {
     title: 'Ubuntu / Linux',
-    description: 'Linux packages will appear here when published',
+    description: 'Ubuntu / Linux x64 · portable archive',
     icon: <Laptop className="h-6 w-6" />,
   },
   macos: {
     title: 'macOS',
-    description: 'Mac installer will appear here when published',
+    description: 'macOS · Apple Silicon or Intel disk image',
     icon: <Laptop className="h-6 w-6" />,
   },
 };
@@ -43,7 +43,7 @@ const platformInfo: Record<Platform, { title: string; description: string; icon:
 function assetPlatform(name: string): Platform | null {
   const lower = name.toLowerCase();
   if (lower.endsWith('.exe') && /mark|lv|setup|installer/.test(lower)) return 'windows';
-  if ((lower.endsWith('.deb') || lower.endsWith('.appimage') || lower.endsWith('.rpm')) && /mark|lv|setup|installer/.test(lower)) return 'linux';
+  if ((lower.endsWith('.deb') || lower.endsWith('.appimage') || lower.endsWith('.rpm') || lower.endsWith('.tar.gz')) && /mark|lv|setup|installer/.test(lower)) return 'linux';
   if (lower.endsWith('.dmg') && /mark|lv|setup|installer/.test(lower)) return 'macos';
   return null;
 }
@@ -167,7 +167,7 @@ export const DownloadPage: React.FC = () => {
                   {asset && (
                     <div className="mt-3 text-[11px] text-[#A8ADA3]">
                       <p className="break-all">{asset.name}</p>
-                      <p className="mt-1">{formatSize(asset.size)} · SHA-256 listed in release assets when provided</p>
+                      <p className="mt-1">{formatSize(asset.size)} · verify with SHA256SUMS.txt from this release</p>
                     </div>
                   )}
                   <div className="mt-auto pt-6">
